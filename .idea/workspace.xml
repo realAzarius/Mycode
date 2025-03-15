@@ -1,0 +1,175 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="SELECTIVE" />
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="4d170651-14ca-4609-a99d-1fee1e30a12c" name="Changes" comment="" />
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="FileTemplateManagerImpl">
+    <option name="RECENT_TEMPLATES">
+      <list>
+        <option value="Python Script" />
+      </list>
+    </option>
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="GitHubPullRequestSearchHistory"><![CDATA[{
+  "lastFilter": {
+    "state": "OPEN",
+    "assignee": "realAzarius"
+  }
+}]]></component>
+  <component name="GithubPullRequestsUISettings">
+    <option name="selectedUrlAndAccountId">
+      <UrlAndAccount>
+        <option name="accountId" value="0d7ce542-2164-4a80-b02b-5498b6f52d13" />
+        <option name="url" value="https://github.com/realAzarius/Mycode.git" />
+      </UrlAndAccount>
+    </option>
+  </component>
+  <component name="HighlightingSettingsPerFile">
+    <setting file="file://$PROJECT_DIR$/Device.py" root0="FORCE_HIGHLIGHTING" />
+    <setting file="file://$PROJECT_DIR$/main.py" root0="FORCE_HIGHLIGHTING" />
+    <setting file="file:///opt/anaconda3/envs/FedAnil+/lib/python3.10/configparser.py" root0="SKIP_INSPECTION" />
+    <setting file="file:///opt/anaconda3/envs/FedAnil+/lib/python3.10/site-packages/torch/nn/modules/conv.py" root0="SKIP_INSPECTION" />
+    <setting file="file:///opt/anaconda3/envs/FedAnil+/lib/python3.10/site-packages/torch/nn/modules/module.py" root0="SKIP_INSPECTION" />
+  </component>
+  <component name="MarkdownSettingsMigration">
+    <option name="stateVersion" value="1" />
+  </component>
+  <component name="ProjectColorInfo">{
+  &quot;associatedIndex&quot;: 2
+}</component>
+  <component name="ProjectId" id="2jOs6KMF8T13fR49W4hnIfUK6jF" />
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;Python.main.executor&quot;: &quot;Run&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;WebServerToolWindowFactoryState&quot;: &quot;true&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;main&quot;,
+    &quot;last_opened_file_path&quot;: &quot;/Users/liuziang/Desktop/Research/Mycode&quot;,
+    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
+    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
+    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
+    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
+    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;com.jetbrains.python.configuration.PyActiveSdkModuleConfigurable&quot;,
+    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
+  }
+}</component>
+  <component name="RunManager">
+    <configuration name="main" type="PythonConfigurationType" factoryName="Python">
+      <module name="Mycode" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="" />
+      <option name="SDK_NAME" value="FedAnil+" />
+      <option name="WORKING_DIRECTORY" value="" />
+      <option name="IS_MODULE_SDK" value="false" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/main.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="false" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
+  </component>
+  <component name="SharedIndexes">
+    <attachedChunks>
+      <set>
+        <option value="bundled-js-predefined-1d06a55b98c1-74d2a5396914-JavaScript-PY-241.14494.241" />
+        <option value="bundled-python-sdk-0509580d9d50-28c9f5db9ffe-com.jetbrains.pycharm.pro.sharedIndexes.bundled-PY-241.14494.241" />
+      </set>
+    </attachedChunks>
+  </component>
+  <component name="SpellCheckerSettings" RuntimeDictionaries="0" Folders="0" CustomDictionaries="0" DefaultDictionary="application-level" UseSingleDictionary="true" transferred="true" />
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="4d170651-14ca-4609-a99d-1fee1e30a12c" name="Changes" comment="" />
+      <created>1721269280965</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1721269280965</updated>
+      <workItem from="1721269281985" duration="380000" />
+      <workItem from="1722388117203" duration="1714000" />
+      <workItem from="1722421726451" duration="754000" />
+      <workItem from="1722676759406" duration="12000" />
+      <workItem from="1722935497652" duration="466000" />
+      <workItem from="1722936153999" duration="792000" />
+      <workItem from="1722937174279" duration="1057000" />
+      <workItem from="1722938236242" duration="960000" />
+      <workItem from="1724055305139" duration="125000" />
+      <workItem from="1725957782252" duration="27000" />
+      <workItem from="1726495211694" duration="352000" />
+      <workItem from="1726551694649" duration="84000" />
+      <workItem from="1727093136341" duration="160000" />
+      <workItem from="1727268961623" duration="4000" />
+      <workItem from="1727334871422" duration="44000" />
+      <workItem from="1727415711190" duration="39000" />
+      <workItem from="1727760148265" duration="1040000" />
+      <workItem from="1728099257630" duration="67000" />
+      <workItem from="1739264869682" duration="3061000" />
+      <workItem from="1740465039479" duration="30000" />
+      <workItem from="1740573396893" duration="1166000" />
+      <workItem from="1740621946573" duration="8448000" />
+      <workItem from="1740716628127" duration="2775000" />
+      <workItem from="1740747282249" duration="632000" />
+      <workItem from="1740986554700" duration="4203000" />
+      <workItem from="1740994782012" duration="3533000" />
+      <workItem from="1741052605787" duration="1011000" />
+      <workItem from="1741084622314" duration="3460000" />
+      <workItem from="1741236160892" duration="129000" />
+      <workItem from="1741236375987" duration="42000" />
+      <workItem from="1741236419495" duration="29000" />
+      <workItem from="1741236450694" duration="3985000" />
+      <workItem from="1741245911856" duration="9342000" />
+      <workItem from="1741412582002" duration="1512000" />
+      <workItem from="1741414112358" duration="7720000" />
+      <workItem from="1741496195037" duration="7969000" />
+      <workItem from="1741573827804" duration="18058000" />
+      <workItem from="1741658792801" duration="1803000" />
+      <workItem from="1741694440973" duration="3101000" />
+      <workItem from="1741745321784" duration="13641000" />
+      <workItem from="1741835363192" duration="12577000" />
+      <workItem from="1741917784432" duration="12316000" />
+      <workItem from="1742013502194" duration="1704000" />
+      <workItem from="1742019433885" duration="6509000" />
+    </task>
+    <servers />
+  </component>
+  <component name="TypeScriptGeneratedFilesManager">
+    <option name="version" value="3" />
+  </component>
+  <component name="XDebuggerManager">
+    <watches-manager>
+      <configuration name="PythonConfigurationType">
+        <watch expression="data.H.H.H.H.H.H" language="Python" />
+      </configuration>
+    </watches-manager>
+  </component>
+  <component name="com.intellij.coverage.CoverageDataManagerImpl">
+    <SUITE FILE_PATH="coverage/code$main.coverage" NAME="main Coverage Results" MODIFIED="1740996729872" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="" />
+    <SUITE FILE_PATH="coverage/Mycode$test.coverage" NAME="test Coverage Results" MODIFIED="1742027168093" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/code$test.coverage" NAME="test Coverage Results" MODIFIED="1740639470395" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/Mycode$main.coverage" NAME="main Coverage Results" MODIFIED="1742026189584" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+  </component>
+</project>

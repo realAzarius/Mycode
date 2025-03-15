@@ -13,12 +13,16 @@ from pathlib import Path
 import shutil
 import torch
 import torch.nn.functional as F
-from Models import Mnist_2NN, Mnist_CNN
+from Models import simplecnn, Mnist_CNN, Mnist_2NN, Mnist_CNN2
 from Device import Device, DevicesInNetwork
 from Block import Block
 import glog as log
 from Blockchain import Blockchain
 import math
+from configparser import ConfigParser
+from sklearn.decomposition import PCA
+from Device import update_graph_matrix_neighbor
+from collections import defaultdict
 
 from phe.encoding import EncodedNumber
 
@@ -32,90 +36,8 @@ from phe import paillier
 
 # set program execution time for logging purpose
 date_time = datetime.now().strftime("%Y%m%d_%H%M%S")
-# log_files_folder_path = f"/share/home//MP2209117/proj/logs/{date_time}"
 log_files_folder_path = f"logs/{date_time}"
 NETWORK_SNAPSHOTS_BASE_FOLDER = "snapshots"
-# for running on Google Colab
-# log_files_folder_path = f"/content/drive/MyDrive/BFA/logs/{date_time}"
-# NETWORK_SNAPSHOTS_BASE_FOLDER = "/content/drive/MyDrive/BFA/snapshots"
-
-parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-                                 description="Block_FedAvg_Simulation")
-
-# debug attributes
-parser.add_argument('-g', '--gpu', type=str, default='0', help='gpu id to use(e.g. 0,1,2,3)')
-parser.add_argument('-v', '--verbose', type=int, default=1, help='print verbose debug log')
-parser.add_argument('-sn', '--save_network_snapshots', type=int, default=0,
-                    help='only save network_snapshots if this is set to 1; will create a folder with date in the snapshots folder')
-parser.add_argument('-dtx', '--destroy_tx_in_block', type=int, default=0,
-                    help='currently transactions stored in the blocks are occupying GPU ram and have not figured out a way to move them to CPU ram or harddisk, so turn it on to save GPU ram in order for PoS to run 100+ rounds. NOT GOOD if there needs to perform chain resyncing.')
-parser.add_argument('-rp', '--resume_path', type=str, default=None,
-                    help='resume from the path of saved network_snapshots; only provide the date')
-parser.add_argument('-sf', '--save_freq', type=int, default=5, help='save frequency of the network_snapshot')
-parser.add_argument('-sm', '--save_most_recent', type=int, default=2,
-                    help='in case of saving space, keep only the recent specified number of snapshops; 0 means keep all')
-
-# FL attributes
-parser.add_argument('-B', '--batchsize', type=int, default=10, help='local train batch size')
-parser.add_argument('-mn', '--model_name', type=str, default='mnist_cnn', help='the model to train')
-parser.add_argument('-lr', "--learning_rate", type=float, default=0.01,
-                    help="learning rate, use value from origin paper as default")
-parser.add_argument('-op', '--optimizer', type=str, default="SGD",
-                    help='optimizer to be used, by default implementing stochastic gradient descent')
-parser.add_argument('-iid', '--IID', type=int, default=0, help='the way to allocate data to devices')
-parser.add_argument('-max_ncomm', '--max_num_comm', type=int, default=100,
-                    help='maximum number of communication rounds, may terminate early if converges')
-parser.add_argument('-nd', '--num_devices', type=int, default=20, help='numer of the devices in the simulation network')
-parser.add_argument('-st', '--shard_test_data', type=int, default=0,
-                    help='it is easy to see the global models are consistent across devices when the test dataset is NOT sharded')
-parser.add_argument('-nm', '--num_malicious', type=int, default=0,
-                    help="number of malicious nodes in the network. malicious node's data sets will be introduced Gaussian noise")
-parser.add_argument('-nv', '--noise_variance', type=int, default=1,
-                    help="noise variance level of the injected Gaussian Noise")
-parser.add_argument('-le', '--default_local_epochs', type=int, default=5,
-                    help='local train epoch. Train local model by this same num of epochs for each worker, if -mt is not specified')
-
-# blockchain system consensus attributes
-parser.add_argument('-ur', '--unit_reward', type=int, default=1,
-                    help='unit reward for providing data, verification of signature, validation and so forth')
-parser.add_argument('-ko', '--knock_out_rounds', type=int, default=6,
-                    help="a worker or validator device is kicked out of the device's peer list(put in black list) if it's identified as malicious for this number of rounds")
-parser.add_argument('-lo', '--lazy_worker_knock_out_rounds', type=int, default=10,
-                    help="a worker device is kicked out of the device's peer list(put in black list) if it does not provide updates for this number of rounds, due to too slow or just lazy to do updates and only accept the model udpates.(do not care lazy validator or miner as they will just not receive rewards)")
-parser.add_argument('-pow', '--pow_difficulty', type=int, default=0, help="if set to 0, meaning miners are using PoS")
-
-# blockchain FL validator/miner restriction tuning parameters
-parser.add_argument('-mt', '--miner_acception_wait_time', type=float, default=0.0,
-                    help="default time window for miners to accept transactions, in seconds. 0 means no time limit, and each device will just perform same amount(-le) of epochs per round like in FedAvg paper")
-parser.add_argument('-ml', '--miner_accepted_transactions_size_limit', type=float, default=0.0,
-                    help="no further transactions will be accepted by miner after this limit. 0 means no size limit. either this or -mt has to be specified, or both. This param determines the final block_size")
-parser.add_argument('-mp', '--miner_pos_propagated_block_wait_time', type=float, default=float("inf"),
-                    help="this wait time is counted from the beginning of the comm round, used to simulate forking events in PoS")
-parser.add_argument('-vh', '--validator_threshold', type=float, default=1.0,
-                    help="a threshold value of accuracy difference to determine malicious worker")
-parser.add_argument('-md', '--malicious_updates_discount', type=float, default=0.0,
-                    help="do not entirely drop the voted negative worker transaction because that risks the same worker dropping the entire transactions and repeat its accuracy again and again and will be kicked out. Apply a discount factor instead to the false negative worker's updates are by some rate applied so it won't repeat")
-parser.add_argument('-mv', '--malicious_validator_on', type=int, default=0,
-                    help="let malicious validator flip voting result")
-
-# distributed system attributes
-parser.add_argument('-ns', '--network_stability', type=float, default=1.0, help='the odds a device is online')
-parser.add_argument('-els', '--even_link_speed_strength', type=int, default=1,
-                    help="This variable is used to simulate transmission delay. Default value 1 means every device is assigned to the same link speed strength -dts bytes/sec. If set to 0, link speed strength is randomly initiated between 0 and 1, meaning a device will transmit  -els*-dts bytes/sec - during experiment, one transaction is around 35k bytes.")
-parser.add_argument('-dts', '--base_data_transmission_speed', type=float, default=70000.0,
-                    help="volume of data can be transmitted per second when -els == 1. set this variable to determine transmission speed (bandwidth), which further determines the transmission delay - during experiment, one transaction is around 35k bytes.")
-parser.add_argument('-ecp', '--even_computation_power', type=int, default=1,
-                    help="This variable is used to simulate strength of hardware equipment. The calculation time will be shrunk down by this value. Default value 1 means evenly assign computation power to 1. If set to 0, power is randomly initiated as an int between 0 and 4, both included.")
-
-# simulation attributes
-parser.add_argument('-ha', '--hard_assign', type=str, default='*,*,*',
-                    help="hard assign number of roles in the network, order by worker, validator and miner. e.g. 12,5,3 assign 12 workers, 5 validators and 3 miners. \"*,*,*\" means completely random role-assigning in each communication round ")
-parser.add_argument('-aio', '--all_in_one', type=int, default=1,
-                    help='let all nodes be aware of each other in the network while registering')
-parser.add_argument('-cs', '--check_signature', type=int, default=1,
-                    help='if set to 0, all signatures are assumed to be verified to save execution time')
-
-# parser.add_argument('-la', '--least_assign', type=str, default='*,*,*', help='the assigned number of roles are at least guaranteed in the network')
 
 if __name__ == "__main__":
 
@@ -123,31 +45,85 @@ if __name__ == "__main__":
     if not os.path.exists('logs'):
         os.makedirs('logs')
 
-    # get arguments
-    args = parser.parse_args()
-    args = args.__dict__
+    args = ConfigParser()
+    args.read('./config/config.ini', encoding='utf-8')
+
+    config = args[args.sections()[0]]
+
+    # debug attributes
+    gpu = config.getint('gpu')
+    verbose = config.getint('verbose')
+    save_network_snapshots = config.getint('save_network_snapshots')
+    destroy_tx_in_block = config.getint('destroy_tx_in_block')
+    resume_path = config.get('resume_path')
+    save_freq = config.getint('save_freq')
+    save_most_recent = config.getint('save_most_recent')
+
+    # FL attributes
+    batch_size = config.getint('batch_size')
+    model_name = config.get('model_name')
+    learning_rate = config.getfloat('learning_rate')
+    optimizer = config.get('optimizer')
+    IID = config.getint('IID')
+    max_num_comm = config.getint('max_num_comm')
+    num_enterprise = config.getint('num_enterprise')
+    shard_test_data = config.getint('shard_test_data')
+    num_malicious = config.getint('num_malicious')
+    noise_variance = config.getint('noise_variance')
+    default_local_epochs = config.getint('default_local_epochs')
+
+    # blockchain system consensus attributes
+    unit_reward = config.getint('unit_reward')
+    knock_out_rounds = config.getint('knock_out_rounds')
+    lazy_local_enterprise_knock_out_rounds = config.getint('lazy_local_enterprise_knock_out_rounds')
+    pow_difficulty = config.getint('pow_difficulty')
+
+    # blockchain FL validator/miner restriction tuning parameters
+    miner_acception_wait_time = config.getfloat('miner_acception_wait_time')
+    miner_accepted_transactions_size_limit = config.getfloat('miner_accepted_transactions_size_limit')
+    miner_pos_propagated_block_wait_time = config.getfloat('miner_pos_propagated_block_wait_time')
+    validator_threshold = config.getfloat('validator_threshold')
+    malicious_updates_discount = config.getfloat('malicious_updates_discount')
+    malicious_validator_on = config.getint('malicious_validator_on')
+
+    # distributed system attributes
+    network_stability = config.getfloat('network_stability')
+    even_link_speed_strength = config.getint('even_link_speed_strength')
+    base_data_transmission_speed = config.getfloat('base_data_transmission_speed')
+    even_computation_power = config.getint('even_computation_power')
+
+    # simulation attributes
+    hard_assign = config.get('hard_assign')
+    all_in_one = config.getint('all_in_one')
+    check_signature = config.getint('check_signature')
+    attack_type = config.get('attack_type')
+    target_acc = config.getfloat('target_acc')
+
+    # new attribute
+    k_principal = config.getint('k_principal')
 
     # detect CUDA
     dev = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+    # dev = torch.device('mps') if torch.backends.mps.is_available() else torch.device('cpu')
 
     # pre-define system variables
     latest_round_num = 0
 
     ''' If network_snapshot is specified, continue from left '''
-    if args['resume_path']:
-        if not args['save_network_snapshots']:
+    if resume_path != 'None':
+        if not save_network_snapshots:
             print("NOTE: save_network_snapshots is set to 0. New network_snapshots won't be saved by conituing.")
-        network_snapshot_save_path = f"{NETWORK_SNAPSHOTS_BASE_FOLDER}/{args['resume_path']}"
+        network_snapshot_save_path = f"{NETWORK_SNAPSHOTS_BASE_FOLDER}/{resume_path}"
         latest_network_snapshot_file_name = \
             sorted([f for f in os.listdir(network_snapshot_save_path) if not f.startswith('.')],
                    key=lambda fn: int(fn.split('_')[-1]), reverse=True)[0]
-        print(f"Loading network snapshot from {args['resume_path']}/{latest_network_snapshot_file_name}")
+        print(f"Loading network snapshot from {resume_path}/{latest_network_snapshot_file_name}")
         print("BE CAREFUL - loaded dev env must be the same as the current dev env, namely, cpu, gpu or gpu parallel")
         latest_round_num = int(latest_network_snapshot_file_name.split('_')[-1])
         devices_in_network = pickle.load(
             open(f"{network_snapshot_save_path}/{latest_network_snapshot_file_name}", "rb"))
         devices_list = list(devices_in_network.devices_set.values())
-        log_files_folder_path = f"/share/home/MP2209117/proj/logs/{args['resume_path']}"
+        log_files_folder_path = f"/share/home/MP2209117/proj/logs/{resume_path}"
         # for colab
         # log_files_folder_path = f"/content/drive/MyDrive/BFA/logs/{args['resume_path']}"
         # original arguments file
@@ -184,25 +160,28 @@ if __name__ == "__main__":
         # 0. create log_files_folder_path if not resume
         os.mkdir(log_files_folder_path)
 
+        with open('./config/config.ini', 'r') as f1:
+            Readargs = f1.readlines()
+
         # 1. save arguments used
         with open(f'{log_files_folder_path}/args_used.txt', 'w') as f:
             f.write("Command line arguments used -\n")
             f.write(' '.join(sys.argv[1:]))
             f.write("\n\nAll arguments used -\n")
-            for arg_name, arg in args.items():
-                f.write(f'\n--{arg_name} {arg}')
+            for data in Readargs:
+                f.write(data)
 
         # 2. create network_snapshot folder
-        if args['save_network_snapshots']:
+        if save_network_snapshots:
             network_snapshot_save_path = f"{NETWORK_SNAPSHOTS_BASE_FOLDER}/{date_time}"
             os.mkdir(network_snapshot_save_path)
 
         # 3. assign system variables
         # for demonstration purposes, this reward is for every rewarded action
-        rewards = args["unit_reward"]
+        rewards = unit_reward
 
         # 4. get number of roles needed in the network
-        roles_requirement = args['hard_assign'].split(',')
+        roles_requirement = hard_assign.split(',')
         # determine roles to assign
         try:
             workers_needed = int(roles_requirement[0])
@@ -219,8 +198,8 @@ if __name__ == "__main__":
 
         # 5. check arguments eligibility
 
-        num_devices = args['num_devices']
-        num_malicious = args['num_malicious']
+        num_devices = num_enterprise
+        num_malicious = num_malicious
 
         if num_devices < workers_needed + miners_needed + validators_needed:
             sys.exit(
@@ -238,44 +217,56 @@ if __name__ == "__main__":
                 print(
                     f"Malicious nodes vs total devices set to {num_malicious}/{num_devices} = {(num_malicious / num_devices) * 100:.2f}%")
 
+        # FedSaC code
+        seed = 0
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed(seed)
+        random.seed(seed)
+        # pca = PCA(n_components=k_principal)
+        dw = []
+        cluster_model_vectors = {}
+
         # 6. create neural net based on the input model name
 
-        net = None
-        if args['model_name'] == 'mnist_2nn':
+        if model_name == 'mnist_2nn':
             net = Mnist_2NN()
-        elif args['model_name'] == 'mnist_cnn':
-            net = Mnist_CNN()
+        elif model_name == 'mnist_cnn':
+            net = Mnist_CNN2()
+
+        # net = simplecnn(10)
 
         # 7. assign GPU(s) if available to the net, otherwise CPU
         # os.environ['CUDA_VISIBLE_DEVICES'] = args['gpu']
         if torch.cuda.device_count() > 1:
             net = torch.nn.DataParallel(net)
         print(f"{torch.cuda.device_count()} GPUs are available to use!")
+        print('Current use {}'.format(dev))
         net = net.to(dev)
 
         # 8. set loss_function
         loss_func = F.cross_entropy
 
         # 9. create devices in the network
-        devices_in_network = DevicesInNetwork(data_set_name='mnist', is_iid=args['IID'], batch_size=args['batchsize'],
-                                              learning_rate=args['learning_rate'], loss_func=loss_func,
-                                              opti=args['optimizer'], num_devices=num_devices,
-                                              network_stability=args['network_stability'], net=net, dev=dev,
-                                              knock_out_rounds=args['knock_out_rounds'],
-                                              lazy_worker_knock_out_rounds=args['lazy_worker_knock_out_rounds'],
-                                              shard_test_data=args['shard_test_data'],
-                                              miner_acception_wait_time=args['miner_acception_wait_time'],
-                                              miner_accepted_transactions_size_limit=args[
-                                                  'miner_accepted_transactions_size_limit'],
-                                              validator_threshold=args['validator_threshold'],
-                                              pow_difficulty=args['pow_difficulty'],
-                                              even_link_speed_strength=args['even_link_speed_strength'],
-                                              base_data_transmission_speed=args['base_data_transmission_speed'],
-                                              even_computation_power=args['even_computation_power'],
-                                              malicious_updates_discount=args['malicious_updates_discount'],
-                                              num_malicious=num_malicious, noise_variance=args['noise_variance'],
-                                              check_signature=args['check_signature'],
-                                              not_resync_chain=args['destroy_tx_in_block'])
+        devices_in_network = DevicesInNetwork(data_set_name='mnist', is_iid=IID, batch_size=batch_size,
+                                              learning_rate=learning_rate, loss_func=loss_func,
+                                              opti=optimizer, num_devices=num_devices,
+                                              network_stability=network_stability, net=net, dev=dev,
+                                              knock_out_rounds=knock_out_rounds,
+                                              lazy_worker_knock_out_rounds=lazy_local_enterprise_knock_out_rounds,
+                                              shard_test_data=shard_test_data,
+                                              miner_acception_wait_time=miner_acception_wait_time,
+                                              miner_accepted_transactions_size_limit=miner_accepted_transactions_size_limit,
+                                              validator_threshold=validator_threshold,
+                                              pow_difficulty=pow_difficulty,
+                                              even_link_speed_strength=even_link_speed_strength,
+                                              base_data_transmission_speed=base_data_transmission_speed,
+                                              even_computation_power=even_computation_power,
+                                              malicious_updates_discount=malicious_updates_discount,
+                                              num_malicious=num_malicious, noise_variance=noise_variance,
+                                              check_signature=check_signature,
+                                              not_resync_chain=destroy_tx_in_block)
         del net
         devices_list = list(devices_in_network.devices_set.values())
 
@@ -283,10 +274,13 @@ if __name__ == "__main__":
         for device in devices_list:
             # set initial global weights
             device.init_global_parameters()
+            # init global model
+            device.init_global_model()
             # helper function for registration simulation - set devices_list and aio
-            device.set_devices_dict_and_aio(devices_in_network.devices_set, args["all_in_one"])
+            device.set_devices_dict_and_aio(devices_in_network.devices_set, all_in_one)
             # simulate peer registration, with respect to device idx order
             device.register_in_the_network()
+
         # remove its own from peer list if there is
         for device in devices_list:
             device.remove_peers(device)
@@ -302,7 +296,7 @@ if __name__ == "__main__":
         open(f"{log_files_folder_path}/kicked_lazy_workers.txt", 'w').close()
 
         # 12. setup the mining consensus
-        mining_consensus = 'PoW' if args['pow_difficulty'] else 'PoS'
+        mining_consensus = 'PoW' if pow_difficulty else 'PoS'
 
     # create malicious worker identification database
     conn = sqlite3.connect(f'{log_files_folder_path}/malicious_wokrer_identifying_log.db')
@@ -316,8 +310,18 @@ if __name__ == "__main__":
 	when_resyncing text
 	)""")
 
-    # VBFL starts here
-    for comm_round in range(latest_round_num + 1, args['max_num_comm'] + 1):
+    target_accuracy = target_acc
+
+    '''
+    定义总通信成本、总计算成本、总精度
+    '''
+    communication_bytes_sum = 0
+    computation_sum = 0
+    total_accuracy = 0
+
+    # FedLZA starts here
+    for comm_round in range(latest_round_num + 1, max_num_comm + 1):
+        communication_bytes_per_round = 0
         # create round specific log folder
         log_files_folder_path_comm_round = f"{log_files_folder_path}/comm_{comm_round}"
         if os.path.exists(log_files_folder_path_comm_round):
@@ -328,7 +332,8 @@ if __name__ == "__main__":
         if dev == torch.device("cuda"):
             with torch.cuda.device('cuda'):
                 torch.cuda.empty_cache()
-        print(f"\nCommunication round {comm_round}")
+        print(
+            f"\n*************************************Communication round {comm_round}****************************************")
         comm_round_start_time = time.time()
         # (RE)ASSIGN ROLES
         workers_to_assign = workers_needed
@@ -360,7 +365,7 @@ if __name__ == "__main__":
             device.online_switcher()
 
         ''' DEBUGGING CODE '''
-        if args['verbose']:
+        if verbose:
 
             # show devices initial chain length and if online
             for device in devices_list:
@@ -413,6 +418,38 @@ if __name__ == "__main__":
         random.shuffle(miners_this_round)
         random.shuffle(validators_this_round)
 
+        worker_to_index = {}
+        index = 0
+        for worker in workers_this_round:
+            worker_to_index[worker.return_idx()] = index
+            index += 1
+
+        '''FedSaC add local models'''
+        local_models = []
+        train_dl_length = {}
+        for worker_iter in range(len(workers_this_round)):
+            worker = workers_this_round[worker_iter]
+            worker.set_worker_local_model(worker.get_global_model())
+            local_models.append(worker.get_worker_local_model())
+            # dw.append({key: torch.zeros_like(value) for key, value in local_models[worker_iter].named_parameters()})
+            dw.append({key: torch.zeros_like(value) for key, value in local_models[worker_iter].named_parameters()})
+            train_dl_length[worker_iter] = len(worker.train_dl.dataset)
+
+        graph_matrix = torch.ones(len(local_models), len(local_models)) / (len(local_models) - 1)
+        graph_matrix[range(len(local_models)), range(len(local_models))] = 0  # 对角线元素为0
+
+        nets_this_round = {worker_to_index[worker.return_idx()]: worker.get_worker_local_model() for worker in
+                           workers_this_round}
+        # nets_this_round = {worker.return_idx(): local_models[worker.return_idx()] for worker in workers_this_round}
+        nets_param_start = {worker_to_index[worker.return_idx()]: copy.deepcopy(worker.get_worker_local_model()) for
+                            worker in workers_this_round}
+        # nets_param_start = {worker.return_idx(): copy.deepcopy(local_models[worker.return_idx()]) for worker in
+        #                     workers_this_round}
+
+        total_data_points = sum(train_dl_length[worker_iter] for worker_iter in range(len(workers_this_round)))
+        fed_avg_freqs = {worker_iter: train_dl_length[worker_iter] / total_data_points for worker_iter in
+                         range(len(workers_this_round))}
+
         ''' workers, validators and miners take turns to perform jobs '''
 
         print(
@@ -422,6 +459,7 @@ if __name__ == "__main__":
             # resync chain(block could be dropped due to fork from last round)
             if worker.resync_chain(mining_consensus):
                 worker.update_model_after_chain_resync(log_files_folder_path_comm_round, conn, conn_cursor)
+            communication_bytes_per_round += sys.getsizeof(worker.global_parameters)
             # worker (should) perform local update and associate
             print(
                 f"{worker.return_idx()} - worker {worker_iter + 1}/{len(workers_this_round)} will associate with a validator and a miner, if online...")
@@ -442,11 +480,13 @@ if __name__ == "__main__":
 
         print(
             ''' Step 2 - validators accept local updates and broadcast to other validators in their respective peer lists (workers local_updates() are called in this step.\n''')
+        principal_list = []
         for validator_iter in range(len(validators_this_round)):
             validator = validators_this_round[validator_iter]
             # resync chain
             if validator.resync_chain(mining_consensus):
                 validator.update_model_after_chain_resync(log_files_folder_path, conn, conn_cursor)
+            communication_bytes_per_round += sys.getsizeof(validator.global_parameters)
             # associate with a miner to send post validation transactions
             if validator.online_switcher():
                 associated_miner = validator.associate_with_device("miner")
@@ -470,10 +510,11 @@ if __name__ == "__main__":
             # used for arrival time easy sorting for later validator broadcasting (and miners' acception order)
             transaction_arrival_queue = {}
             # workers local_updates() called here as their updates transmission may be restrained by miners' acception time and/or size
-            if args['miner_acception_wait_time']:
+            if miner_acception_wait_time:
                 print(
-                    f"miner wati time is specified as {args['miner_acception_wait_time']} seconds. let each worker do local_updates till time limit")
+                    f"miner wati time is specified as {miner_acception_wait_time} seconds. let each worker do local_updates till time limit")
                 for worker_iter in range(len(associated_workers)):
+                    local_pca = PCA(n_components=k_principal)
                     worker = associated_workers[worker_iter]
                     if not worker.return_idx() in validator.return_black_list():
                         # TODO here, also add print() for below miner's validators
@@ -486,9 +527,11 @@ if __name__ == "__main__":
                         while total_time_tracker < validator.return_miner_acception_wait_time():
                             # simulate the situation that worker may go offline during model updates transmission to the validator, based on per transaction
                             if worker.online_switcher():
-                                local_update_spent_time = worker.worker_local_update(rewards,
-                                                                                     log_files_folder_path_comm_round,
-                                                                                     comm_round)
+                                local_update_spent_time, principal_list = worker.worker_local_update(rewards,
+                                                                                                     log_files_folder_path_comm_round,
+                                                                                                     comm_round,
+                                                                                                     local_pca,
+                                                                                                     cluster_model_vectors)
                                 unverified_transaction = worker.return_local_updates_and_signature(comm_round)
                                 # size in bytes, usually around 35000 bytes per transaction
                                 unverified_transactions_size = getsizeof(str(unverified_transaction))
@@ -519,7 +562,7 @@ if __name__ == "__main__":
                             else:
                                 # worker goes offline and skip updating for one transaction, wasted the time of one update and transmission
                                 wasted_update_time, wasted_update_params = worker.waste_one_epoch_local_update_time(
-                                    args['optimizer'])
+                                    optimizer)
                                 wasted_update_params_size = getsizeof(str(wasted_update_params))
                                 wasted_transmission_delay = wasted_update_params_size / lower_link_speed
                                 if wasted_update_time + wasted_transmission_delay > validator.return_miner_acception_wait_time():
@@ -538,15 +581,20 @@ if __name__ == "__main__":
             else:
                 # did not specify wait time. every associated worker perform specified number of local epochs
                 for worker_iter in range(len(associated_workers)):
+                    local_pca = PCA(n_components=k_principal)
                     worker = associated_workers[worker_iter]
                     if not worker.return_idx() in validator.return_black_list():
                         print(
                             f'worker {worker_iter + 1}/{len(associated_workers)} of validator {validator.return_idx()} is doing local updates')
                         if worker.online_switcher():
-                            local_update_spent_time = worker.worker_local_update(rewards,
-                                                                                 log_files_folder_path_comm_round,
-                                                                                 comm_round, local_epochs=args[
-                                    'default_local_epochs'])
+                            local_update_spent_time, orthogonal_basis = worker.worker_local_update(rewards=rewards,
+                                                                                                   log_files_folder_path_comm_round=log_files_folder_path_comm_round,
+                                                                                                   comm_round=comm_round,
+                                                                                                   pca=local_pca,
+                                                                                                   cluster_models=cluster_model_vectors,
+                                                                                                   local_epochs=default_local_epochs,
+                                                                                                   worker_to_index=worker_to_index)
+                            principal_list.append(orthogonal_basis)
                             worker_link_speed = worker.return_link_speed()
                             lower_link_speed = validator_link_speed if validator_link_speed < worker_link_speed else worker_link_speed
                             unverified_transaction = worker.return_local_updates_and_signature(comm_round)
@@ -568,12 +616,20 @@ if __name__ == "__main__":
             # in case validator off line for accepting broadcasted transactions but can later back online to validate the transactions itself receives
             validator.set_transaction_for_final_validating_queue(sorted(transaction_arrival_queue.items()))
 
+            global_parameters = validator.get_global_model().state_dict()
+
             # broadcast to other validators
             if transaction_arrival_queue:
                 validator.validator_broadcast_worker_transactions()
             else:
                 print(
                     "No transactions have been received by this validator, probably due to workers and/or validators offline or timeout while doing local updates or transmitting updates, or all workers are in validator's black list.")
+
+        graph_matrix = update_graph_matrix_neighbor(graph_matrix=graph_matrix, nets_this_round=nets_this_round,
+                                                    initial_global_parameters=global_parameters,
+                                                    principal_list=principal_list,
+                                                    dw=dw, fed_avg_freqs=fed_avg_freqs, lambda_1=0.9, lambda_2=1.4,
+                                                    complementary_metric='PA', similarity_metric='all')
 
         print(
             ''' Step 2.5 - with the broadcasted workers transactions, validators decide the final transaction arrival order \n''')
@@ -613,7 +669,7 @@ if __name__ == "__main__":
             if final_transactions_arrival_queue:
                 # validator asynchronously does one epoch of update and validate on its own test set
                 local_validation_time = validator.validator_update_model_by_one_epoch_and_validate_local_accuracy(
-                    args['optimizer'])
+                    optimizer)
                 print(
                     f"{validator.return_idx()} - validator {validator_iter + 1}/{len(validators_this_round)} is validating received worker transactions...")
                 for (arrival_time, unconfirmmed_transaction) in final_transactions_arrival_queue:
@@ -623,7 +679,7 @@ if __name__ == "__main__":
                             arrival_time = local_validation_time
                         validation_time, post_validation_unconfirmmed_transaction = validator.validate_worker_transaction(
                             unconfirmmed_transaction, rewards, log_files_folder_path, comm_round,
-                            args['malicious_validator_on'])
+                            malicious_validator_on)
                         if validation_time:
                             validator.add_post_validation_transaction_to_queue((arrival_time + validation_time,
                                                                                 validator.return_link_speed(),
@@ -719,6 +775,9 @@ if __name__ == "__main__":
                 time_limit = miner.return_miner_acception_wait_time()
                 size_limit = miner.return_miner_accepted_transactions_size_limit()
                 for (arrival_time, unconfirmmed_transaction) in final_transactions_arrival_queue:
+                    print('--------------------- new transaction start ---------------------')
+                    print('This transaction from worker {} is verified by validator {}'.format(
+                        unconfirmmed_transaction['worker_device_idx'], unconfirmmed_transaction['validation_done_by']))
                     if miner.online_switcher():
                         if time_limit:
                             if arrival_time > time_limit:
@@ -882,7 +941,7 @@ if __name__ == "__main__":
                     print("select winning block based on PoS")
                     # filter the ordered_all_blocks_processing_queue to contain only the blocks within time limit
                     for (block_arrival_time, block_to_verify) in ordered_all_blocks_processing_queue:
-                        if block_arrival_time < args['miner_pos_propagated_block_wait_time']:
+                        if block_arrival_time < miner_pos_propagated_block_wait_time:
                             candidate_PoS_blocks[devices_in_network.devices_set[
                                 block_to_verify.return_mined_by()].return_stake()] = block_to_verify
                     high_to_low_stake_ordered_blocks = sorted(candidate_PoS_blocks.items(), reverse=True)
@@ -936,22 +995,41 @@ if __name__ == "__main__":
         print(
             ''' Step 6 last step - process the added block - 1.collect usable updated params\n 2.malicious nodes identification\n 3.get rewards\n 4.do local udpates\n This code block is skipped if no valid block was generated in this round''')
         all_devices_round_ends_time = []
+        cluster_model_vector_add = defaultdict(list)
         for device in devices_list:
+            print('{} is performing final processing'.format(device.return_idx()))
             if device.return_the_added_block() and device.online_switcher():
                 # collect usable updated params, malicious nodes identification, get rewards and do local udpates
-                processing_time = device.process_block(device.return_the_added_block(), log_files_folder_path, conn,
-                                                       conn_cursor)
+                processing_time, cluster_model_vector = device.process_block(device.return_the_added_block(),
+                                                                             log_files_folder_path, conn,
+                                                                             conn_cursor, graph_matrix,
+                                                                             nets_this_round, global_parameters,
+                                                                             worker_to_index)
+                for key, value in cluster_model_vector.items():
+                    cluster_model_vector_add[key].append(value.cpu().numpy())
                 device.other_tasks_at_the_end_of_comm_round(comm_round, log_files_folder_path)
                 device.add_to_round_end_time(processing_time)
                 all_devices_round_ends_time.append(device.return_round_end_time())
+            else:
+                print('{} should not be selected in this round'.format(device.return_idx()))
+
+        for key, value in cluster_model_vector_add.items():
+            stack_arrays = np.stack(value)
+            average_array = np.mean(stack_arrays, axis=0)
+            average_tensor = torch.from_numpy(average_array)
+            cluster_model_vectors[key] = average_tensor
 
         print(''' Logging Accuracies by Devices ''')
         for device in devices_list:
             device.accuracy_this_round = device.validate_model_weights()
+            if total_accuracy < device.accuracy_this_round:
+                total_accuracy = device.accuracy_this_round
             with open(f"{log_files_folder_path_comm_round}/accuracy_comm_{comm_round}.txt", "a") as file:
                 is_malicious_node = "M" if device.return_is_malicious() else "B"
                 file.write(
                     f"{device.return_idx()} {device.return_role()} {is_malicious_node}: {device.accuracy_this_round}\n")
+
+        communication_bytes_sum += communication_bytes_per_round
 
         # logging time, mining_consensus and forking
         # get the slowest device end time
@@ -961,6 +1039,7 @@ if __name__ == "__main__":
             try:
                 comm_round_block_gen_time = max(comm_round_block_gen_time)
                 file.write(f"comm_round_block_gen_time: {comm_round_block_gen_time}\n")
+                file.write('communication overhead: {} bytes\n'.format(communication_bytes_per_round))
             except:
                 no_block_msg = "No valid block has been generated this round."
                 print(no_block_msg)
@@ -978,9 +1057,10 @@ if __name__ == "__main__":
                     no_valid_block_msg = f"No valid block in round {comm_round}\n"
                     if file2.readlines()[-1] != no_valid_block_msg:
                         file2.write(no_valid_block_msg)
-            file.write(f"mining_consensus: {mining_consensus} {args['pow_difficulty']}\n")
+            file.write(f"mining_consensus: {mining_consensus} {pow_difficulty}\n")
             file.write(f"forking_happened: {forking_happened}\n")
             file.write(f"comm_round_spent_time_on_this_machine: {comm_round_spent_time}\n")
+            computation_sum += comm_round_spent_time
         conn.commit()
 
         # if no forking, log the block miner
@@ -1003,6 +1083,12 @@ if __name__ == "__main__":
             with open(f"{log_files_folder_path_comm_round}/accuracy_comm_{comm_round}.txt", "a") as file:
                 file.write(f"block_mined_by: Forking happened\n")
 
+        with open(f"{log_files_folder_path_comm_round}/accuracy_comm_{comm_round}.txt", "a") as file:
+            file.write(f"Malicious Enterprises:\n")
+            for enterprise in devices_list:
+                if enterprise.return_is_malicious():
+                    file.write(f"{enterprise.return_idx()}, ")
+
         print(''' Logging Stake by Devices ''')
         for device in devices_list:
             device.accuracy_this_round = device.validate_model_weights()
@@ -1012,18 +1098,18 @@ if __name__ == "__main__":
                     f"{device.return_idx()} {device.return_role()} {is_malicious_node}: {device.return_stake()}\n")
 
         # a temporary workaround to free GPU mem by delete txs stored in the blocks. Not good when need to resync chain
-        if args['destroy_tx_in_block']:
+        if destroy_tx_in_block:
             for device in devices_list:
                 last_block = device.return_blockchain_object().return_last_block()
                 if last_block:
                     last_block.free_tx()
 
         # save network_snapshot if reaches save frequency
-        if args['save_network_snapshots'] and (comm_round == 1 or comm_round % args['save_freq'] == 0):
-            if args['save_most_recent']:
+        if save_network_snapshots and (comm_round == 1 or comm_round % save_freq == 0):
+            if save_most_recent:
                 paths = sorted(Path(network_snapshot_save_path).iterdir(), key=os.path.getmtime)
-                if len(paths) > args['save_most_recent']:
-                    for _ in range(len(paths) - args['save_most_recent']):
+                if len(paths) > save_most_recent:
+                    for _ in range(len(paths) - save_most_recent):
                         # make it 0 byte as os.remove() moves file to the bin but may still take space
                         # https://stackoverflow.com/questions/53028607/how-to-remove-the-file-from-trash-in-drive-in-colab
                         open(paths[_], 'w').close()
@@ -1031,3 +1117,19 @@ if __name__ == "__main__":
             snapshot_file_path = f"{network_snapshot_save_path}/snapshot_r_{comm_round}"
             print(f"Saving network snapshot to {snapshot_file_path}")
             pickle.dump(devices_in_network, open(snapshot_file_path, "wb"))
+
+        print('-------------------comm_round:{} is done!-----------------------'.format(comm_round))
+        print("Total Computation Cost(Seconds):{}".format(computation_sum))
+        print("Total Communication Cost(Bytes):{}".format(communication_bytes_sum))
+        print("Total Accuracy(%):{}".format(total_accuracy * 100))
+
+        if total_accuracy >= target_accuracy:
+            break
+
+    with open(f'{log_files_folder_path}/Output.txt', 'w') as f:
+        # FedAnil+: Total Computation Cost (Seconds)
+        f.write(f"Total Computation Cost (Seconds): {computation_sum} \n")
+        # FedAnil+: Total Communication Cost (Bytes)
+        f.write(f"Total Communication Cost (Bytes): {communication_bytes_sum} \n")
+        # FedAnil+: Total Accuracy (%)
+        f.write(f"Total Accuracy (%): {total_accuracy * 100} \n")
